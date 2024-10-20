@@ -1,13 +1,24 @@
-import fs from "fs";
+import {
+  createCipheriv,
+  createDecipheriv,
+  randomBytes,
+  scrypt,
+} from "node:crypto";
+import { promises as fs } from "fs";
 import path from "path";
-import crypto from "crypto";
-import { logMessage } from "./logger";
+import { logActivity } from "./logger";
 
-const algorithm = "aes-256-cbc";
-const iv = crypto.randomBytes(16);
+const algorithm = "aes-192-cbc";
+const keyLength = 24;
+const ivLength = 16;
 
-function getKey(password: string): Buffer {
-  return crypto.createHash("sha256").update(password).digest();
+async function generateKey(password: string): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    scrypt(password, "salt", keyLength, (err, derivedKey) => {
+      if (err) reject(err);
+      else resolve(derivedKey);
+    });
+  });
 }
 
 export async function encryptFile(
@@ -15,19 +26,32 @@ export async function encryptFile(
   password: string
 ): Promise<void> {
   try {
-    await logMessage(`Mulai mengenkripsi file ${filePath}`);
-    const key = getKey(password);
-    const cipher = crypto.createCipheriv(algorithm, key, iv);
-    const input = fs.createReadStream(filePath);
-    const output = fs.createWriteStream(`${filePath}.enc`);
+    const key = await generateKey(password);
+    const iv = randomBytes(ivLength);
+    const cipher = createCipheriv(algorithm, key, iv);
 
-    input.pipe(cipher).pipe(output);
+    const fileData = await fs.readFile(filePath);
+    const encryptedData = Buffer.concat([
+      iv,
+      cipher.update(fileData),
+      cipher.final(),
+    ]);
+    const encryptedBase64 = encryptedData.toString("base64");
 
-    output.on("finish", async () => {
-      await logMessage(`Berhasil mengenkripsi file ${filePath}`);
-    });
+    const encryptedFilePath = path.join(
+      path.dirname(filePath),
+      path.basename(filePath) + ".enc"
+    );
+    await fs.writeFile(encryptedFilePath, encryptedBase64);
+
+    await logActivity(`File terenkripsi: ${encryptedFilePath}`);
+    console.log(
+      new Date().toLocaleString(),
+      `: File berhasil terenkripsi: ${encryptedFilePath}`
+    );
   } catch (error) {
-    await logMessage(`Error ketika mengenkripsi file: ${error}`);
+    await logActivity(`Enkripsi gagal: ${error}`);
+    console.error(`Enkripsi gagal: ${error}`);
   }
 }
 
@@ -36,19 +60,30 @@ export async function decryptFile(
   password: string
 ): Promise<void> {
   try {
-    await logMessage(`Mulai mendekripsi file ${encryptedFilePath}`);
-    const key = getKey(password);
-    const decipher = crypto.createDecipheriv(algorithm, key, iv);
-    const input = fs.createReadStream(encryptedFilePath);
-    const outputFilePath = encryptedFilePath.replace(/\.enc$/, "");
-    const output = fs.createWriteStream(outputFilePath);
+    const key = await generateKey(password);
+    const encryptedBase64 = await fs.readFile(encryptedFilePath, "utf8");
 
-    input.pipe(decipher).pipe(output);
+    const encryptedData = Buffer.from(encryptedBase64, "base64");
 
-    output.on("finish", async () => {
-      await logMessage(`Berhasil mendekripsi file ${encryptedFilePath}`);
-    });
+    const iv = encryptedData.subarray(0, ivLength);
+    const encryptedContent = encryptedData.subarray(ivLength);
+    const decipher = createDecipheriv(algorithm, key, iv);
+
+    const decryptedData = Buffer.concat([
+      decipher.update(encryptedContent),
+      decipher.final(),
+    ]);
+
+    const decryptedFilePath = encryptedFilePath.replace(".enc", ".dec");
+    await fs.writeFile(decryptedFilePath, decryptedData);
+
+    await logActivity(`File terdekripsi: ${decryptedFilePath}`);
+    console.log(
+      new Date().toLocaleString(),
+      `: File berhasil terdekripsi: ${decryptedFilePath}`
+    );
   } catch (error) {
-    await logMessage(`Error ketika mendekripsi file: ${error}`);
+    await logActivity(`Dekripsi gagal: ${error}`);
+    console.error(`Dekripsi gagal: ${error}`);
   }
 }

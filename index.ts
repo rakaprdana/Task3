@@ -1,25 +1,18 @@
 import { encryptFile, decryptFile } from "./encryptDecrypt";
+import path from "path";
 
 async function main() {
-  const action = process.argv[2];
-  const filePath = process.argv[3];
-  const password = process.argv[4];
+  const filePath = path.join(__dirname, "file.txt");
+  const password = "password";
 
-  if (!action || !filePath || !password) {
-    console.error("Usage: npm start <encrypt/decrypt> <filePath> <password>");
-    process.exit(1);
-  }
+  // Enkripsi file
+  await encryptFile(filePath, password);
 
-  if (action === "encrypt") {
-    await encryptFile(filePath, password);
-  } else if (action === "decrypt") {
-    await decryptFile(filePath, password);
-  } else {
-    console.error('Action must be either "encrypt" or "decrypt"');
-    process.exit(1);
-  }
+  // Dekripsi file
+  const encryptedFilePath = filePath + ".enc";
+  await decryptFile(encryptedFilePath, password);
 }
 
-main().catch((error) => {
-  console.error("An error occurred:", error);
-});
+main().catch((error) =>
+  console.error(`Error in main function: ${error.message}`)
+);

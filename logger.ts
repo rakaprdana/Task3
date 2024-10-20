@@ -1,22 +1,13 @@
-import fs from "fs";
-import path from "path";
+import { promises as fs } from "fs";
+import path, { format } from "path";
 
-function getLogFileName(): string {
-  const now = new Date();
-  const fileName = `${now.getHours()}_${now.getMinutes()}_${now.getSeconds()}_${
-    now.getMonth() + 1
-  }_${now.getDate()}_${now.getFullYear()}.log`;
-  return path.join(__dirname, "../logs", fileName);
-}
+const logFilePath = path.join(__dirname, "activity.log");
 
-export async function logMessage(message: string): Promise<void> {
-  const logFile = getLogFileName();
-  const logEntry = `[${new Date().toISOString()}] ${message}\n`;
-
+export async function logActivity(message: string): Promise<void> {
+  const logMessage = `${new Date().toLocaleString()} - ${message}\n`;
   try {
-    await fs.promises.mkdir(path.dirname(logFile), { recursive: true });
-    await fs.promises.appendFile(logFile, logEntry, "utf8");
+    await fs.appendFile(logFilePath, logMessage);
   } catch (error) {
-    console.error("Error logging message:", error);
+    console.error(`Failed to write log: ${error}`);
   }
 }
